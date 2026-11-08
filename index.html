@@ -1,0 +1,226 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MDANG LINK INSPECTOR V3</title>
+<style>
+*{box-sizing:border-box}
+body{
+ margin:0;background:#f7f3ff;color:#302344;
+ font-family:Arial,sans-serif;padding:20px 12px
+}
+main{
+ max-width:440px;margin:auto;background:white;
+ border:1px solid #e5d8fb;border-radius:18px;
+ padding:20px 15px;box-shadow:0 10px 30px #7136e822
+}
+h1{text-align:center;color:#7136e8;font-size:20px}
+.sub{text-align:center;color:#887b9a;font-size:12px}
+.label{font-size:11px;font-weight:bold;color:#7045a8;margin:18px 0 9px}
+.providers{display:flex;flex-wrap:wrap;gap:7px}
+.pill{
+ border:1px solid #dfd0fa;background:white;
+ color:#6842a5;border-radius:20px;padding:8px 10px;
+ font-size:11px
+}
+.pill.active{background:#7136e8;color:white}
+input{
+ width:100%;padding:13px;border:1px solid #cdb6f3;
+ border-radius:9px;font-size:13px
+}
+button{cursor:pointer}
+.actions{display:flex;gap:8px;margin-top:12px}
+.action{
+ flex:1;border:0;border-radius:9px;padding:13px 5px;
+ font-size:11px;font-weight:bold
+}
+.primary{background:#7136e8;color:white}
+.secondary{background:#f1e9ff;color:#6938b5}
+.card{
+ margin-top:15px;padding:13px;border:1px solid #e5d8fb;
+ border-radius:10px;background:#fdfbff
+}
+.card h2{font-size:12px;color:#6738b5}
+.progress{height:7px;background:#eee5fb;border-radius:20px}
+.bar{height:7px;width:0;background:#7136e8;transition:.2s}
+.result{display:none;font-size:12px;line-height:1.7}
+.small{font-size:11px;color:#887b9a}
+.notice{
+ margin-top:15px;padding:11px;background:#fff8e8;
+ border:1px solid #f0dfb6;border-radius:9px;
+ font-size:11px;color:#765b22;line-height:1.5
+}
+</style>
+</head>
+<body>
+<main>
+<h1>MDANG LINK INSPECTOR</h1>
+<div class="sub">VERSION 3.0</div>
+
+<div class="label">CHỌN NỀN TẢNG</div>
+<div class="providers">
+<button class="pill active">Tự động</button>
+<button class="pill">Gofile</button>
+<button class="pill">Linkvertise</button>
+<button class="pill">Lemay</button>
+<button class="pill">Traffic1</button>
+<button class="pill">Slink</button>
+<button class="pill">Khác</button>
+</div>
+
+<div class="label">DÁN URL CẦN KIỂM TRA</div>
+<input id="url" type="url" placeholder="https://example.com/...">
+
+<div class="actions">
+<button class="action primary" id="inspect">PHÂN TÍCH LINK</button>
+<button class="action secondary" id="open">MỞ LINK GỐC</button>
+</div>
+
+<section class="card" id="progress" hidden>
+<div>
+<b id="status">Đang phân tích...</b>
+<span id="pct" style="float:right">0%</span>
+</div>
+<div class="progress" style="margin-top:10px">
+<div class="bar" id="bar"></div>
+</div>
+<div class="small" id="log">Đang chuẩn bị...</div>
+</section>
+
+<section class="card result" id="result">
+<h2>KẾT QUẢ PHÂN TÍCH</h2>
+<div id="details"></div>
+<button class="action primary" id="copy">SAO CHÉP URL</button>
+</section>
+
+<div class="card">
+<h2>LỊCH SỬ GẦN ĐÂY</h2>
+<div id="history" class="small">Chưa có liên kết.</div>
+<button class="action secondary" id="clear">XÓA LỊCH SỬ</button>
+</div>
+
+<div class="notice">
+<b>Lưu ý:</b> Công cụ phân tích URL và các tham số chuyển hướng được nhúng. Không tự động vượt CAPTCHA, quảng cáo hoặc cơ chế bảo vệ website.
+</div>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+let currentURL='';
+
+document.querySelectorAll('.pill').forEach(btn=>{
+ btn.onclick=()=>{
+  document.querySelectorAll('.pill').forEach(x=>x.classList.remove('active'));
+  btn.classList.add('active');
+ };
+});
+
+function getURL(){
+ try{
+  const u=new URL($('url').value.trim());
+  if(!['http:','https:'].includes(u.protocol))throw 0;
+  return u;
+ }catch{
+  alert('URL không hợp lệ!');
+  return null;
+ }
+}
+
+function findRedirect(u){
+ const keys=['url','target','redirect','redirect_url','dest','to','link','next'];
+ for(const [key,value] of u.searchParams){
+  if(keys.includes(key.toLowerCase())){
+   try{
+    const decoded=decodeURIComponent(value);
+    const target=new URL(decoded);
+    if(['http:','https:'].includes(target.protocol)){
+     return target.href;
+    }
+   }catch{}
+  }
+ }
+ return null;
+}
+
+$('inspect').onclick=()=>{
+ const u=getURL();
+ if(!u)return;
+
+ $('progress').hidden=false;
+ $('result').style.display='none';
+ $('inspect').disabled=true;
+
+ let p=0;
+ const steps=[
+  'Đọc cấu trúc URL...',
+  'Kiểm tra tên miền...',
+  'Phân tích redirect...',
+  'Hoàn tất phân tích...'
+ ];
+
+ const timer=setInterval(()=>{
+  p+=25;
+  $('bar').style.width=p+'%';
+  $('pct').textContent=p+'%';
+  $('log').textContent=steps[p/25-1];
+
+  if(p>=100){
+   clearInterval(timer);
+   $('inspect').disabled=false;
+   currentURL=u.href;
+
+   const target=findRedirect(u);
+
+   $('details').innerHTML=`
+    <b>Tên miền:</b> ${u.hostname}<br>
+    <b>Giao thức:</b> ${u.protocol}<br>
+    <b>Số tham số:</b> ${[...u.searchParams].length}<br>
+    <b>URL chuyển hướng nhúng:</b><br>
+    ${target||'Không tìm thấy'}<br>
+    <b>Ghi chú:</b> Đây là kết quả phân tích tĩnh.
+   `;
+
+   $('result').style.display='block';
+   $('status').textContent='Hoàn tất';
+
+   let history=JSON.parse(localStorage.getItem('mdang_history')||'[]');
+   history=[u.href,...history.filter(x=>x!==u.href)].slice(0,5);
+   localStorage.setItem('mdang_history',JSON.stringify(history));
+   renderHistory();
+  }
+ },180);
+};
+
+$('open').onclick=()=>{
+ const u=getURL();
+ if(u)window.open(u.href,'_blank','noopener,noreferrer');
+};
+
+$('copy').onclick=async()=>{
+ if(!currentURL)return;
+ try{
+  await navigator.clipboard.writeText(currentURL);
+  alert('Đã sao chép URL!');
+ }catch{
+  alert('Không thể sao chép tự động.');
+ }
+};
+
+function renderHistory(){
+ const h=JSON.parse(localStorage.getItem('mdang_history')||'[]');
+ $('history').innerHTML=h.map(x=>
+  `<div style="padding:6px;overflow-wrap:anywhere">${x}</div>`
+ ).join('')||'Chưa có liên kết.';
+}
+
+$('clear').onclick=()=>{
+ localStorage.removeItem('mdang_history');
+ renderHistory();
+};
+
+renderHistory();
+</script>
+</body>
+</html>
